@@ -1,0 +1,702 @@
+<script src='processing.js'></script>
+
+<script type='text/processing' data-processing-target='mycanvas'>
+
+/**
+ * Write a description of class TicTacToe here.
+ * 
+ * @author Andrew Guterman
+ * @version 11-27-15
+ * Uses Processing 3.0.1
+ */
+
+import java.util.ArrayList;
+
+public class ScoredBoard
+{
+	public char[][] board;
+	public int score;
+	
+	public ScoredBoard(char[][] board, int score)
+	{
+		this.board = board;
+		this.score = score;
+	}
+}
+
+final int PIECE_WIDTH = 100;
+final int PIECE_HEIGHT = 100;
+final int PIECE_SPACING = 5;
+final int PIECE_TEXT_SIZE = 64;
+
+final int TITLE_HEIGHT = 40;
+
+final int BOARD_WIDTH = ((PIECE_WIDTH + PIECE_SPACING) * 3) + PIECE_SPACING;
+final int BOARD_HEIGHT = ((PIECE_HEIGHT + PIECE_SPACING) * 3) + PIECE_SPACING + TITLE_HEIGHT;
+
+final int GAME_STATE_MENU = 1;
+final int GAME_STATE_PLAYING = 2;
+final int GAME_STATE_FINISHING = 3;
+final int GAME_STATE_FINISHED = 4;
+
+final int AI_NONE = 0;
+final int AI_DIFFICULTY_EASY = 1;
+final int AI_DIFFICULTY_MEDIUM = 2;
+final int AI_DIFFICULTY_HARD = 3;
+
+final int PLAYER_ONE = 1;
+final int PLAYER_TWO = 2;
+final int PLAYER_TIE = 3;
+
+final int ANIMATION_TIME = 750;
+final int ANIMATION_BUFFER = 1250;
+
+final char[] BOARD_PIECES = new char[] {'X', 'O'};
+
+char[][] boardPieces = new char[3][3];
+int gameState;
+int playersTurn;
+int currentTurn;
+int gameWinner;
+int aiDifficulty;
+int animationStart;
+
+public static void main(String args[])
+{
+	PApplet.main("TicTacToe");
+}
+
+public void setup()
+{
+	size(BOARD_WIDTH, BOARD_HEIGHT);
+	gameState = GAME_STATE_MENU;
+	playersTurn = PLAYER_ONE;
+	currentTurn = 0;
+	gameWinner = -1;
+	aiDifficulty = AI_NONE;
+	
+	for(int i = 0; i < 3; i++)
+	{
+		for(int j = 0; j < 3; j++)
+		{
+			boardPieces[i][j] = ' ';
+		}
+	}
+}
+
+public void draw()
+{
+	background(47, 47, 47);
+	
+	fill(255, 255, 255);
+	
+	stroke(0, 0, 0);
+	strokeWeight(1);
+
+	if(gameState == GAME_STATE_MENU)
+	{
+		// Button: Play
+		rect(PIECE_SPACING, PIECE_SPACING, BOARD_WIDTH - (PIECE_SPACING * 2), 40);
+		
+		fill(0, 0, 0);
+		textSize(16);
+		text("Play", (BOARD_WIDTH - textWidth("Play")) / 2, PIECE_SPACING + 25);
+		
+		// AI
+		fill(255, 255, 255);
+		text("Versus AI", (BOARD_WIDTH - textWidth("Versus AI")) / 2, 100);
+		
+		// Button: Easy
+		rect(PIECE_SPACING, PIECE_SPACING + 110, BOARD_WIDTH - (PIECE_SPACING * 2), 40);
+		
+		fill(0, 0, 0);
+		textSize(16);
+		text("Easy", (BOARD_WIDTH - textWidth("Easy")) / 2, PIECE_SPACING + 25 + 110);
+		
+		// Button: Medium
+		fill(255, 255, 255);
+		rect(PIECE_SPACING, PIECE_SPACING + 160, BOARD_WIDTH - (PIECE_SPACING * 2), 40);
+		
+		fill(0, 0, 0);
+		textSize(16);
+		text("Medium", (BOARD_WIDTH - textWidth("Medium")) / 2, PIECE_SPACING + 25 + 160);
+		
+		// Button: Hard
+		fill(255, 255, 255);
+		rect(PIECE_SPACING, PIECE_SPACING + 210, BOARD_WIDTH - (PIECE_SPACING * 2), 40);
+		
+		fill(0, 0, 0);
+		textSize(16);
+		text("Hard", (BOARD_WIDTH - textWidth("Hard")) / 2, PIECE_SPACING + 25 + 210);
+	}
+	else if(gameState == GAME_STATE_PLAYING || gameState == GAME_STATE_FINISHING)
+	{	
+		textSize(24);
+		
+		text("Player " + playersTurn + "'s Turn", PIECE_SPACING, 25);
+		
+		textSize(64);
+		
+		for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+		{
+			for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+			{
+				int[] tilePosition = getTilePosition(rowIndex, columnIndex);
+				
+				fill(255, 255, 255);
+				rect(tilePosition[0], tilePosition[1], PIECE_WIDTH, PIECE_HEIGHT);
+				
+				fill(0, 0, 0);
+				text(boardPieces[rowIndex][columnIndex], tilePosition[0] + (PIECE_TEXT_SIZE / 2), tilePosition[1] + PIECE_TEXT_SIZE + 5);
+			}
+		}
+		
+		if(gameState == GAME_STATE_FINISHING)
+		{
+			stroke(255, 0, 0);
+			strokeWeight(10);
+			
+			int[][] winningEndpoints = getWinningEndpoints();
+			
+			int[] startTilePosition = getTilePosition(winningEndpoints[0][0], winningEndpoints[0][1]);
+			startTilePosition[0] += (PIECE_WIDTH / 2);
+			startTilePosition[1] += (PIECE_HEIGHT / 2);
+			
+			int[] endTilePosition = getTilePosition(winningEndpoints[1][0], winningEndpoints[1][1]);
+			endTilePosition[0] += (PIECE_WIDTH / 2);
+			endTilePosition[1] += (PIECE_HEIGHT / 2);
+			
+			int[] difference = new int[] {endTilePosition[0] - startTilePosition[0], endTilePosition[1] - startTilePosition[1]};
+			
+			//line(startTilePosition[0] + (PIECE_WIDTH / 2), startTilePosition[1] + (PIECE_HEIGHT / 2), (endTilePosition[0] + (PIECE_WIDTH / 2)) * (animationStart / (animationStart + ANIMATION_TIME)), (endTilePosition[1] + (PIECE_HEIGHT / 2)) * (animationStart / (animationStart + ANIMATION_TIME)));
+			
+			double ratio = Math.min(((double)(millis() - animationStart)) / ANIMATION_TIME, 1);
+			
+			line(
+					startTilePosition[0],
+					startTilePosition[1],
+					(int)(startTilePosition[0] + (difference[0] * ratio)),
+					(int)(startTilePosition[1] + (difference[1] * ratio))
+				);
+			
+			if(millis() > animationStart + ANIMATION_TIME + ANIMATION_BUFFER)
+			{
+				gameState = GAME_STATE_FINISHED;
+			}
+		}
+	}
+	else if(gameState == GAME_STATE_FINISHED)
+	{
+		textSize(32);
+		
+		String winnerText;
+		
+		if(gameWinner == PLAYER_TIE)
+		{
+			winnerText = "Nobody wins!";
+		}
+		else
+		{
+			winnerText = "Player " + gameWinner + " wins!";
+		}
+		
+		text(winnerText, (BOARD_WIDTH - textWidth(winnerText)) / 2, 35);
+		
+		// Button: Play Again
+		rect(PIECE_SPACING, TITLE_HEIGHT + 20, BOARD_WIDTH - (PIECE_SPACING * 2), 40);
+		
+		fill(0, 0, 0);
+		textSize(16);
+		text("Play Again", (BOARD_WIDTH - textWidth("Play Again")) / 2, TITLE_HEIGHT + 20 + 25);
+	}
+}
+
+public void mousePressed()
+{
+	if(gameState == GAME_STATE_MENU)
+	{
+		if(isMouseWithinRectangle(PIECE_SPACING, PIECE_SPACING, BOARD_WIDTH - (PIECE_SPACING * 2), 40)) // Button: Play
+		{
+			gameState = GAME_STATE_PLAYING;
+		}
+		else if(isMouseWithinRectangle(PIECE_SPACING, PIECE_SPACING + 110, BOARD_WIDTH - (PIECE_SPACING * 2), 40)) // Button: Easy
+		{
+			gameState = GAME_STATE_PLAYING;
+			aiDifficulty = AI_DIFFICULTY_EASY;
+		}
+		else if(isMouseWithinRectangle(PIECE_SPACING, PIECE_SPACING + 160, BOARD_WIDTH - (PIECE_SPACING * 2), 40)) // Button: Medium
+		{
+			gameState = GAME_STATE_PLAYING;
+			aiDifficulty = AI_DIFFICULTY_MEDIUM;
+		}
+		else if(isMouseWithinRectangle(PIECE_SPACING, PIECE_SPACING + 210, BOARD_WIDTH - (PIECE_SPACING * 2), 40)) // Button: Hard
+		{
+			gameState = GAME_STATE_PLAYING;
+			aiDifficulty = AI_DIFFICULTY_HARD;
+		}
+	}
+	else if(gameState == GAME_STATE_PLAYING)
+	{
+		int selectedTile[] = getSelectedTile();
+		
+		if(selectedTile[0] != -1)
+		{
+			placePiece(selectedTile);
+		}
+	}
+	else if(gameState == GAME_STATE_FINISHED)
+	{
+		int topLeftX = PIECE_SPACING;
+		int topLeftY = TITLE_HEIGHT + 20;
+		
+		if(isMouseWithinRectangle(topLeftX, topLeftY, BOARD_WIDTH - (PIECE_SPACING * 2), 40))
+		{
+			setup();
+		}
+	}
+}
+
+private void placePiece(int[] tile)
+{
+	boardPieces[tile[0]][tile[1]] = BOARD_PIECES[playersTurn - 1];
+	
+	int winner = getWinner(boardPieces);
+	
+	if(winner == -1)
+	{
+		if(gameState == GAME_STATE_PLAYING)
+		{
+			currentTurn++;
+
+			if(currentTurn == 9)
+			{
+				gameWinner = PLAYER_TIE;
+				gameState = GAME_STATE_FINISHED;
+			}
+			else
+			{
+				if(playersTurn == PLAYER_ONE)
+				{
+					playersTurn = PLAYER_TWO;
+					
+					if(aiDifficulty != AI_NONE)
+					{
+						processAIMove();
+					}
+				}
+				else
+				{
+					playersTurn = PLAYER_ONE;
+				}
+			}
+		}
+	}
+	else
+	{
+		gameWinner = winner;
+		gameState = GAME_STATE_FINISHING;
+		animationStart = millis();
+	}
+}
+
+private void processAIMove()
+{
+	int[] selectedTile = new int[2];
+	
+	if(aiDifficulty == AI_DIFFICULTY_EASY)
+	{
+		boolean duplicate = false;
+		
+		do
+		{
+			duplicate = false;
+			
+			selectedTile[0] = (int)(Math.random() * 3);
+			selectedTile[1] = (int)(Math.random() * 3);
+			
+			if(boardPieces[selectedTile[0]][selectedTile[1]] != ' ')
+			{
+				duplicate = true;
+			}
+		}
+		while(duplicate);
+	}
+	else if(aiDifficulty == AI_DIFFICULTY_MEDIUM)
+	{
+		if(Math.random() < 0.5) // 50% chance to pick the correct move
+		{
+			selectedTile = getCorrectMove();
+		}
+		else
+		{
+			boolean duplicate = false;
+			
+			do
+			{
+				duplicate = false;
+				
+				selectedTile[0] = (int)(Math.random() * 3);
+				selectedTile[1] = (int)(Math.random() * 3);
+				
+				if(boardPieces[selectedTile[0]][selectedTile[1]] != ' ')
+				{
+					duplicate = true;
+				}
+			}
+			while(duplicate);
+		}
+	}
+	else if(aiDifficulty == AI_DIFFICULTY_HARD)
+	{
+		selectedTile = getCorrectMove();
+	}
+	
+	placePiece(selectedTile);
+}
+
+private boolean isMouseWithinRectangle(int x, int y, int width, int height)
+{
+	return (mouseX >= x && mouseX <= (x + width) && mouseY >= y && mouseY <= (y + height));
+}
+
+private int[] getSelectedTile()
+{
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			if(boardPieces[rowIndex][columnIndex] == ' ')
+			{
+				int[] tilePosition = getTilePosition(rowIndex, columnIndex);
+				
+				if(isMouseWithinRectangle(tilePosition[0], tilePosition[1], PIECE_WIDTH, PIECE_HEIGHT))
+				{
+					return new int[] {rowIndex, columnIndex};
+				}
+			}
+		}
+	}
+	
+	return new int[] {-1, -1};
+}
+
+private int getWinner(char[][] board)
+{
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			char currentPiece = board[rowIndex][columnIndex];
+			
+			if(currentPiece != ' ') // Check if a piece is there
+			{
+				if((columnIndex == 0 && ((currentPiece == board[rowIndex][columnIndex + 1] && currentPiece == board[rowIndex][columnIndex + 2]) || (rowIndex == 0 && currentPiece == board[rowIndex + 1][columnIndex + 1] && currentPiece == board[rowIndex + 2][columnIndex + 2]) || (rowIndex == 2 && currentPiece == board[rowIndex - 1][columnIndex + 1] && currentPiece == board[rowIndex - 2][columnIndex + 2])))
+				|| (rowIndex == 0 && currentPiece == board[rowIndex + 1][columnIndex] && currentPiece == board[rowIndex + 2][columnIndex]))
+				{
+					if(currentPiece == 'X') return PLAYER_ONE;
+					else return PLAYER_TWO;
+				}
+			}
+		}
+	}
+	
+	return -1;
+}
+
+private int[][] getWinningEndpoints()
+{
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			char currentPiece = boardPieces[rowIndex][columnIndex];
+			
+			if(currentPiece != ' ') // Check if a piece is there
+			{
+				if(columnIndex == 0)
+				{
+					if(currentPiece == boardPieces[rowIndex][columnIndex + 1] && currentPiece == boardPieces[rowIndex][columnIndex + 2])
+					{
+						return new int[][] {{rowIndex, columnIndex}, {rowIndex, columnIndex + 2}};
+					}
+					else if(rowIndex == 0 && currentPiece == boardPieces[rowIndex + 1][columnIndex + 1] && currentPiece == boardPieces[rowIndex + 2][columnIndex + 2])
+					{
+						return new int[][] {{rowIndex, columnIndex}, {rowIndex + 2, columnIndex + 2}};
+					}
+					else if(rowIndex == 2 && currentPiece == boardPieces[rowIndex - 1][columnIndex + 1] && currentPiece == boardPieces[rowIndex - 2][columnIndex + 2])
+					{
+						return new int[][] {{rowIndex, columnIndex}, {rowIndex - 2, columnIndex + 2}};
+					}
+				}
+				
+				if(rowIndex == 0 && currentPiece == boardPieces[rowIndex + 1][columnIndex] && currentPiece == boardPieces[rowIndex + 2][columnIndex])
+				{
+					return new int[][] {{rowIndex, columnIndex}, {rowIndex + 2, columnIndex}};
+				}
+			}
+		}
+	}
+	
+	return new int[][] {{0, 0}, {0, 0}};
+}
+
+private int[] getTilePosition(int row, int column)
+{
+	return new int[] {(column * (PIECE_WIDTH + PIECE_SPACING)) + PIECE_SPACING, (row * (PIECE_HEIGHT + PIECE_SPACING)) + PIECE_SPACING + TITLE_HEIGHT};
+}
+
+private ArrayList<char[][]> getValidBoards(char[][] board, int turn)
+{
+	ArrayList<char[][]> validBoards = new ArrayList<char[][]>();
+	char[][] tempBoard = copyBoard(board);
+	
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			if(tempBoard[rowIndex][columnIndex] == ' ')
+			{
+				tempBoard[rowIndex][columnIndex] = BOARD_PIECES[turn - 1];
+				validBoards.add(tempBoard);
+				
+				tempBoard = copyBoard(board);
+			}
+		}
+	}
+	
+	return validBoards;
+}
+
+private char[][] copyBoard(char[][] board)
+{
+	char[][] newBoard = new char[3][3];
+	
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			newBoard[rowIndex][columnIndex] = board[rowIndex][columnIndex];
+		}
+	}
+	
+	return newBoard;
+}
+
+private void printBoard(char[][] board)
+{
+	/*System.out.println("\n\nBOARD SCORE: " + getBoardScore(board));*/
+	System.out.println("------------------------------------\n");
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			if(board[rowIndex][columnIndex] == ' ')
+			{
+				System.out.print("_");
+			}
+			else
+			{
+				System.out.print(board[rowIndex][columnIndex]);
+			}
+		}
+		
+		System.out.println();
+	}
+	
+	System.out.println("\n----------------------------------------------\n");
+}
+
+private int getBoardScore(char[][] board)
+{
+	int winner = getWinner(board);
+	
+	if(winner == PLAYER_ONE)
+	{
+		return 1;
+	}
+	else if(winner == PLAYER_TWO)
+	{
+		return -1;
+	}
+	
+	return 0;
+}
+
+private boolean isDraw(char[][] board)
+{
+	int winner = getWinner(board);
+	
+	if(winner == PLAYER_ONE)
+	{
+		return false;
+	}
+	else if(winner == PLAYER_TWO)
+	{
+		return false;
+	}
+	
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			if(board[rowIndex][columnIndex] == ' ')
+			{
+				return false;
+			}
+		}
+	}
+	
+	return true;
+}
+
+private int getNextTurn(int turn)
+{
+	if(turn == PLAYER_ONE)
+	{
+		return PLAYER_TWO;
+	}
+	else
+	{
+		return PLAYER_ONE;
+	}
+}
+
+// CHECK PASSED BOARD (parameter), FINISH IF WIN OR LOSE, OTHERWISE =====>
+// for each of the boards, calculate a score
+// store all boards with their scores (parallel lists)
+// push minimax (not score) to the scores list
+// at leafs (no children), returns score back to guy who called it
+// player wants max score
+// computer wants min score
+private char[][] minimaxTest;
+private ScoredBoard minimax(char[][] board, int turn)
+{
+	int boardScore = getBoardScore(board);
+	
+	if(boardScore != 0 || isDraw(board))
+	{
+		return new ScoredBoard(board, boardScore);
+	}
+	
+	ArrayList<ScoredBoard> scoredBoards = new ArrayList<ScoredBoard>();
+	
+	for(char[][] currentBoard: getValidBoards(board, turn))
+	{
+		boardScore = getBoardScore(currentBoard);
+		
+		if(boardScore == 1 && playersTurn == PLAYER_ONE)
+		{
+			minimaxTest = currentBoard;
+			return new ScoredBoard(currentBoard, boardScore);
+		}
+		else if(boardScore == -1 && playersTurn == PLAYER_TWO)
+		{
+			minimaxTest = currentBoard;
+			return new ScoredBoard(currentBoard, boardScore);
+		}
+		
+		scoredBoards.add(new ScoredBoard(currentBoard, minimax(currentBoard, getNextTurn(turn)).score));	
+	}
+	
+	if(turn == PLAYER_ONE) // Player
+	{
+		int highestScore = scoredBoards.get(0).score;
+		int highestScoreIndex = 0;
+		
+		for(int boardIndex = 1; boardIndex < scoredBoards.size(); boardIndex++)
+		{
+			if(scoredBoards.get(boardIndex).score > highestScore)
+			{
+				highestScore = scoredBoards.get(boardIndex).score;
+				highestScoreIndex = boardIndex;
+			}
+		}
+		
+		minimaxTest = scoredBoards.get(highestScoreIndex).board;
+
+		return scoredBoards.get(highestScoreIndex);
+	}
+	else // AI
+	{
+		int lowestScore = scoredBoards.get(0).score;
+		int lowestScoreIndex = 0;
+		
+		for(int boardIndex = 1; boardIndex < scoredBoards.size(); boardIndex++)
+		{
+			if(scoredBoards.get(boardIndex).score < lowestScore)
+			{
+				lowestScore = scoredBoards.get(boardIndex).score;
+				lowestScoreIndex = boardIndex;
+			}
+		}
+		
+		minimaxTest = scoredBoards.get(lowestScoreIndex).board;
+
+		return scoredBoards.get(lowestScoreIndex);
+	}
+}
+
+private int[] getCorrectMove()
+{
+	char[][] board = minimax(boardPieces, playersTurn).board;
+	
+	for(int rowIndex = 0; rowIndex < 3; rowIndex++)
+	{
+		for(int columnIndex = 0; columnIndex < 3; columnIndex++)
+		{
+			if(boardPieces[rowIndex][columnIndex] != board[rowIndex][columnIndex])
+			{
+				return new int[] {rowIndex, columnIndex};
+			}
+		}
+	}
+	
+	return new int[] {0, 0};
+}
+
+</script>
+
+<html>
+	<head>
+		<link href='http://fonts.googleapis.com/css?family=Roboto:500,900,400italic,100,300,300italic,400' rel='stylesheet'>
+
+		<style>
+			body
+			{
+				background: #F2F2F2;
+
+				margin: 0;
+			}
+
+			.title
+			{
+				background: #2578CF;
+
+				font: normal 24px 'Roboto', sans-serif;
+				color: white;
+
+				text-shadow: 1px 1px rgba(0, 0, 0, 0.4);
+
+				padding: 10px 0px;
+				margin-bottom: 30px;
+			}
+
+			.subtitle
+			{
+				font-size: 14px;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div align='center'>
+			<div class='title'>
+				TicTacToe
+
+				<div class='subtitle'>by Andrew Guterman</div>
+			</div>
+			
+			<canvas id='mycanvas' width='500' height='500'></canvas>
+		</div>
+	</body>
+</html>
